@@ -1,0 +1,133 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+import json
+import os
+
+# Constants for file paths
+INVENTORY_FILE = "inventory.json"
+USER_FILE = "users.json"
+
+# Initialize user file if it doesn't exist
+if not os.path.exists(USER_FILE):
+    with open(USER_FILE, 'w') as f:
+        json.dump({}, f)
+
+def authenticate_user(username, password):
+    try:
+        with open(USER_FILE, 'r') as f:
+            users = json.load(f)
+    except FileNotFoundError:
+        return False
+
+    return users.get(username) == password
+
+def create_user(username, password):
+    try:
+        with open(USER_FILE, 'r') as f:
+            users = json.load(f)
+    except FileNotFoundError:
+        users = {}
+
+    if username in users:
+        return False
+
+    users[username] = password
+    with open(USER_FILE, 'w') as f:
+        json.dump(users, f)
+    
+    return True
+
+def save_inventory(inventory):
+    with open(INVENTORY_FILE, 'w') as f:
+        json.dump(inventory, f)
+
+def load_inventory():
+    try:
+        with open(INVENTORY_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+class InventoryApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Inventory Management System")
+        self.geometry("600x400")
+        
+        self.inventory = load_inventory()
+        self.setup_gui()
+
+    def setup_gui(self):
+        menubar = tk.Menu(self)
+        self.config(menu=menubar)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Add Product", command=self.add_product)
+        file_menu.add_command(label="Edit Product", command=self.edit_product)
+        file_menu.add_command(label="Delete Product", command=self.delete_product)
+        file_menu.add_command(label="Generate Report", command=self.generate_report)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.quit)
+
+        self.product_listbox = tk.Listbox(self, width=80)
+        self.product_listbox.pack(pady=10)
+        self.update_product_listbox()
+
+    def update_product_listbox(self):
+        self.product_listbox.delete(0, tk.END)
+        for product, info in self.inventory.items():
+            self.product_listbox.insert(tk.END, f"{product}: {info['quantity']} in stock")
+
+    def add_product(self):
+        product_name = simpledialog.askstring("Add Product", "Enter product name:")
+        if product_name:
+            quantity = simpledialog.askinteger("Add Product", "Enter quantity:")
+            if quantity is not None:
+                self.inventory[product_name] = {'quantity': quantity}
+                save_inventory(self.inventory)
+                self.update_product_listbox()
+
+    def edit_product(self):
+        selected_product = self.product_listbox.get(tk.ACTIVE).split(':')[0]
+        if selected_product:
+            new_quantity = simpledialog.askinteger("Edit Product", f"Enter new quantity for {selected_product}:")
+            if new_quantity is not None:
+                if selected_product in self.inventory:
+                    self.inventory[selected_product]['quantity'] = new_quantity
+                    save_inventory(self.inventory)
+                    self.update_product_listbox()
+
+    def delete_product(self):
+        selected_product = self.product_listbox.get(tk.ACTIVE).split(':')[0]
+        if selected_product:
+            del self.inventory[selected_product]
+            save_inventory(self.inventory)
+            self.update_product_listbox()
+
+    def generate_report(self):
+        low_stock_items = [f"{product}: {info['quantity']} in stock"
+                           for product, info in self.inventory.items() if info['quantity'] < 5]
+        report = "\n".join(low_stock_items) if low_stock_items else "No low stock items."
+        messagebox.showinfo("Low Stock Report", report)
+
+def login():
+    username = simpledialog.askstring("Login", "Enter username:")
+    password = simpledialog.askstring("Login", "Enter password:", show='*')
+    if authenticate_user(username, password):
+        app = InventoryApp()
+        app.mainloop()
+    else:
+        if messagebox.askyesno("Login Failed", "Invalid username or password. Do you want to create a new account?"):
+            create_account()
+
+def create_account():
+    username = simpledialog.askstring("Create Account", "Enter new username:")
+    password = simpledialog.askstring("Create Account", "Enter new password:", show='*')
+    if username and password:
+        if create_user(username, password):
+            messagebox.showinfo("Account Created", "Account successfully created. Please log in.")
+        else:
+            messagebox.showerror("Account Creation Failed", "Username already exists or error occurred.")
+
+if __name__ == "__main__":
+    login()
